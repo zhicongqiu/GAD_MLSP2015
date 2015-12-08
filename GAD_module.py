@@ -49,12 +49,26 @@ def get_pair_mutual_info(gm_model):
         #get its score under gmm
         temp_score_xy = gm_model.score(rand_num)
         #x and y score
-        temp_score_x,temp_score_y = get_single_gm_score(gm_model)
+        temp_score_x = get_single_gm_score(rand_num,gm_model,0)
+        temp_score_y = get_single_gm_score(rand_num,gm_model,1)
         #sample mutual info
         if temp_score_x!=0 and temp_score_y!=0 and temp_score_xy!=0:
             MI += (temp_score_xy-temp_score_x-temp_score_y)
         count+=1
     return MI/total_trials
+
+#generate score on a single dim specified by which
+def get_single_gm_score(sample,gm_double,which):
+    M = gm_double.weights_.size
+    g_x = mixture.GMM(n_components = M,covariance_type='full')
+    g_x.weights_ = gm_double.weights_
+    g_x.means_ = gm_double.means_[:,which]
+    temp_covars = np.array([])
+    for i in range(M):
+        temp_covars.append(gm_double.covars_[i,which,which])
+    g_x.covars_ = temp_covars
+    
+    return g_x.score(sample[which])
 
 #get all pairwise gmms' MI
 #for the same feature index, MI = 0
@@ -63,7 +77,7 @@ def get_all_pairwise_MI(GMM_pair):
     count = 0
     for i in range(len(GMM_pair)):
         for j in range(i+1,len(GMM_pair)):
-            MI_pair[i,j] = get_pair_mutual_info(GMM_pair[count])
+            MI_pair[i][j] = get_pair_mutual_info(GMM_pair[count])
             if MI_pair<0:
                 raise ValueError('Mutual Information cannot be negative')
             elif MI_pair<1e-10:
@@ -82,17 +96,17 @@ def get_DT(MI_subset):
     N = len(min_span_tree)
     #indicates which nodes are added, hence they are not children
     indicator = np.zeros((N+1,1)) #add 1 to compensate for N edges and N+1 nodes
-    rearranged = [min_span_tree.pop(0)]
+    rearranged = [list(min_span_tree.pop(0))]
     indicator[[rearrange[0][0],rearrange[0][1]]] = 1 #default parents
     while not min_span_tree:
         for ins in len(min_span_tree):
             if indicator[min_span_tree[ins][0]]==1:
                 temp1,temp2 = min_span_tree.pop(ins)
-                rearrange.append(temp1,temp2)
+                rearrange.append([temp1,temp2])
                 indicator[temp2] = 1
             elif indicator[min_span_tree[ins][1]]==1:
                 temp1,temp2 = min_span_tree.pop(ins)
-                rearrange.append((temp2,temp1))
+                rearrange.append([temp2,temp1])
                 indicator[temp1] = 1
     return rearranged
 
@@ -144,8 +158,10 @@ def calculate_logpval_DT(data,gm_model,DT):
 
     post = temp_gmm.predict_proba(data[:][:,temp_id0])
     #get double-sided p-value
-    temp_logpval = get_single_logpval(data[:,temp_id0],
-                                      temp_gmm.means_,temp_gmm.covars_,post)
+    temp_logpval = np.log(np.sum(get_single_pval(data[:,temp_id0],
+                                                 temp_gmm.means_,
+                                                 temp_gmm.covars_,post),
+                                 axis=1))
     for i in range(0,len(DT)):
         temp_id0,temp_id1 = DT[i][0],DT[i][1]
         #use idx0,idx1 to indicate which of the (x,y) is parent
@@ -169,35 +185,43 @@ def calculate_logpval_DT(data,gm_model,DT):
         co = []
         for j in range(0,M):
             co.append(temp_gmm.covars_[j,idx0,idx0])
-        temp_single = get_single_logpval(data[:,temp_id0],
+        #get single dimension pval with uniform weights
+        temp_single = get_single_pval(data[:,temp_id0],
                                          temp_gmm.means_[:,idx0],
-                                         co,post)
-        temp_double = get_double_logpval(np.hstack((data[:,data_gmm_idx0],
+                                         co,np.ones((M,1)))
+        temp_double = get_double_pval(np.hstack((data[:,data_gmm_idx0],
                                                     data[:,data_gmm_idx1])),
                                          temp_gmm,post)
-        temp_logpval += (temp_double-temp_single)
+        temp_logpval+=np.log(np.sum(temp_double/temp_single,axis = 1))
+            
                                          
     return temp_logpval
-def get_single_logpval(data,gm_means,gm_covars,post):
+
+#return N*M p-value
+def get_single_pval(data,gm_means,gm_covars,post):
 
     #get double-sided p-value
     N,M = post.shape
-    single_pval = np.zeros((N,1))
-    for i in range(0,M):
-        temp_ef = math.erfc((data-gm_means[i])/
+    single_logpval = np.zeros((N,M))
+    for j in range(0,N):
+        for i in range(0,M):
+            temp_ef = math.erfc((data[j]-gm_means[i])/
                                    np.sqrt(gm_covars[i]))
-        for j in range(0,len(temp_ef)):
-            if temp_ef[j]<=0.5:
-                single_pval[j]+=temp_ef[j]*2
+            if temp_ef<=0.5:
+                single_logpval[j][i]=temp_ef*2
             else:
-                single_pval[j]+=2*(1-temp_ef[j])
-    return np.log(single_pval)
+                single_pval[j][i]=2*(1-temp_ef)
+            #smallest p-value used is 1e-100
+            if single_pval[j][i]<1e-100:
+                single_pval[j][i] = 1e-100
+            single_pval[j][i]=single_pval[j][i]*post[i]
+    return single_pval
 
-def get_double_logpval(data,gmm,post):
+def get_double_pval(data,gmm,post):
     #calculate joint pvalue for each data sample
     #four possibilities relative to mu and data
     N,M = post.shape
-    temp_double = np.zeros((N,1))
+    temp_double = np.zeros((N,M))
     for n in range(0,N):
         for j in range(0,M):
             mean_target = gmm.means_[j,:]
@@ -205,26 +229,42 @@ def get_double_logpval(data,gmm,post):
             #first quadrant w.r.t. mu[j,:]
             if (data[n,0]>=mean_target[0]
                 and data[n,1]>=mean_target[1]):
-                temp_double[n]+=\
-                4*post(n,j)*mvn.mvnun(np.array([data[n,0],data[n,1]]),
-                                      np.array([1e6,1e6]),
-                                      mean_target,cov_target)
+                temp_double[n][j] =\
+                4*mvn.mvnun(np.array([data[n,0],data[n,1]]),
+                            np.array([1e6,1e6]),
+                            mean_target,cov_target)
             elif (data[n,0]<=mean_target[0]
                   and data[n,1]<=mean_target[1]):
-                temp_double[n]+=\
-                4*post(n,j)*mvn.mvnun(np.array([-1e6,-1e6]),
-                                      np.array([data[n,0],data[n,1]]),
-                                      mean_target,cov_target)
+                temp_double[n][j] =\ 
+                4*mvn.mvnun(np.array([-1e6,-1e6]),
+                            np.array([data[n,0],data[n,1]]),
+                            mean_target,cov_target)
             elif (data[n,0]<=mean_target[0]
                   and data[n,1]>=mean_target[1]):
-                temp_double[n]+=\
-                4*post(n,j)*mvn.mvnun(np.array([-1e6,data[n,1]]),
-                                      np.array([data[n,0],1e6]),
-                                      mean_target,cov_target)
+                temp_double[n][j] =\ 
+                4*mvn.mvnun(np.array([-1e6,data[n,1]]),
+                            np.array([data[n,0],1e6]),
+                            mean_target,cov_target)
             elif (data[n,0]>=mean_target[0]
                   and data[n,1]<=mean_target[1]):
-                temp_double[n]+=\
-                4*post(n,j)*mvn.mvnun(np.array([data[n,0],-1e6]),
-                                      np.array([1e6,data[n,1]]),
-                                      mean_target,cov_target)
-    return np.log(temp_double)
+                temp_double[n][j] =\
+                4*mvn.mvnun(np.array([data[n,0],-1e6]),
+                            np.array([1e6,data[n,1]]),
+                            mean_target,cov_target)
+            #smallest p-value used is 1e-100
+            if temp_double[n][j]<1e-100:
+                temp_double[n][j] = 1e-100
+            temp_double[n][j] = temp_double[n][j]*post[j]
+    return temp_double
+
+def calculate_roc(anomaly_list,LABEL,normal_cat):
+    #calculate roc auc given the index of LABEL
+    TD,FA = 0,0
+    roc_auc = 0.
+    for i in anomaly_list:
+        if LABEL[i]!=normal_cat:
+            TD+=1
+        else:
+            roc_auc+=TD
+            FA+=1
+    return roc_auc/(TD*FA)

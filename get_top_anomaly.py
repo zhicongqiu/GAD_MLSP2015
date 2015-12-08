@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn
 import math
-
+import itertools
 from GAD_module import *
 #learn background models
 #learning pairwise gmms
@@ -12,19 +12,17 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
 
     BEST = []
     SEQ = []
-    #max_order = 20
     N,K = DATA.shape
     index_set = range(0,N)
-    
+    feature_set = range(0,N)
     while len(SEQ)<top_list:
         temp_score = 0
         N,K = DATA.shape #N samples and K features
-        for i in range(0,max_order):
-            if i<start_TA or all == True:
-                trial_comb = combntns(range(0,i)) # needs corrections
-                for f_subset in trial_comb:
+        for i in range(1,max_order+1):
+            if i<=start_TA or all == True:
+                for f_subset in itertools.combinations(feature_set,i):
                     #get the subset matrices
-                    DATA_subset = DATA[f_subset][:,f_subset]
+                    DATA_subset = DATA[list(f_subset)][:,list(f_subset)]
                     GMM_subset = []
                     MI_subset = []
                     for j in range(0,len(f_subset)):
@@ -48,12 +46,12 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
                         temp_score = subset_score
                         temp_seq = subset_seq
                         temp_order = i
-                        temp_index = f_subset
+                        temp_fsubset = f_subset
 
             elif i>start_TA: #later this part
                 #trial-add feature from the best i-1 candidates
 
-        BEST.append([len(temp_seq),temp_order,temp_score,temp_index])
+        BEST.append([len(temp_seq),temp_order,temp_score,temp_fsubset])
         print str(len(temp_seq))+' samples added into the list\n'
         SEQ.extend([index_set[i] for i in temp_seq])
         #remove these samples
