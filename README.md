@@ -1,6 +1,7 @@
 # GAD_MLSP2015
 
 main file is in get_top_anomaly
+
 goal: extract group anomalies from DATA
 
 ask author for source file
