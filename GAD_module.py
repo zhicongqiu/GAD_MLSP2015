@@ -8,18 +8,39 @@ from MinimumSpanningTree import *
 #generate gmm pairwise models
 def get_all_pairwise_gmm(DATA,M_max):
     N,K = DATA.shape
-    GMM_pairwise = []
+    GMM_pair = []
+    num_comp = []
     for i in range(0,K):
+        GMM_pair[i].append([])
         for j in range(0,K):
             if j<i:
-                GMM_pairwise[i].append(GMM_pairwise[j][i])
+                GMM_pair[i].append(GMM_pair[j][i])
             elif j==i:
-                _,gmm = GMM_BIC(DATA[:,i],M_max)
-                GMM_pairwise[i].append(gmm) 
+                temp_num,gmm = GMM_BIC(DATA[:,i],M_max)
+                GMM_pair[i].append(gmm) 
+                num_comp.append(temp_num)
             else:
-                num_comp,gmm = GMM_BIC(np.hstack((DATA[:,i],DATA[:,j])),M_max)
-                GMM_pairwise[i].append(gmm)
-    return GMM_pairwise
+                temp_num,gmm = GMM_BIC(np.hstack((DATA[:,i],DATA[:,j])),M_max)
+                GMM_pair[i].append(gmm)
+                num_comp.append(temp_num)
+    return num_comp,GMM_pair
+
+#get all pairwise gmms' MI
+#for the same feature index, MI = 0
+def get_all_pairwise_MI(GMM_pair):
+    MI_pair = [[0 for i in range(len(GMM_pair))] for j in range(len(GMM_pair))]
+    count = 0
+    for i in range(len(GMM_pair)):
+        for j in range(i+1,len(GMM_pair)):
+            MI_pair[i][j] = get_pair_mutual_info(GMM_pair[i][j])
+            if MI_pair<0:
+                raise ValueError('Mutual Information cannot be negative')
+            elif MI_pair<1e-10:
+                #avoid assigning too small MI
+                MI_pair = 1e-10
+            MI_pair[j][i] = MI_pair[i][j]
+            count+=1
+    return MI_pair
 
 #get mutual information of a pair of r.v.
 #by MC sampling, number of generated samples fixed to 1e6
@@ -31,8 +52,7 @@ def get_pair_mutual_info(gm_model):
     M = len(gm_model.weights_)
     weight_index_sorted = sorted(range(M), 
                                  key=lambda k: gm_model.weights_[k])
-    weight_cumsum = np.cumsum(np.asarray(gm_model.weights_)\
-                              [weight_index_sorted])
+    weight_cumsum = np.cumsum(gm_model.weights_[weight_index_sorted])
     #simulate 1e6 MC
     count = 0
     MI = 0.
@@ -63,29 +83,11 @@ def get_single_gm_score(sample,gm_double,which):
     g_x = mixture.GMM(n_components = M,covariance_type='full')
     g_x.weights_ = gm_double.weights_
     g_x.means_ = gm_double.means_[:,which]
-    temp_covars = np.array([])
+    g_x.covars_ = np.array([])
     for i in range(M):
-        temp_covars.append(gm_double.covars_[i,which,which])
-    g_x.covars_ = temp_covars
-    
-    return g_x.score(sample[which])
+        g_x.covars_.append(gm_double.covars_[i,which,which])
 
-#get all pairwise gmms' MI
-#for the same feature index, MI = 0
-def get_all_pairwise_MI(GMM_pair):
-    MI_pair = [[0 for i in range(GMM_pair)] for j in range(len(GMM_pair))]
-    count = 0
-    for i in range(len(GMM_pair)):
-        for j in range(i+1,len(GMM_pair)):
-            MI_pair[i][j] = get_pair_mutual_info(GMM_pair[count])
-            if MI_pair<0:
-                raise ValueError('Mutual Information cannot be negative')
-            elif MI_pair<1e-10:
-                #avoid assigning too small MI
-                MI_pair = 1e-10
-            MI_pair[j][i] = MI_pair[i][j]
-            count+=1
-    return MI_pair
+    return g_x.score(sample[which])
 
 #get dependence tree structure for a feature subset
 def get_DT(MI_subset):
@@ -132,7 +134,7 @@ def get_subset_score(data,mi,gm_model,N,K):
     log_p = data_logpval[logpval_index_sorted[0]]
     count = 1
     if N>1:
-        for i in range(1,logdata_pval):
+        for i in range(1,data_logpval):
             if (N-count)*np.exp(data_logpval[logpval_index_sorted[i]])<1:
                 count+=1
                 sub_seq.append(logpval_index_sorted[i]))
@@ -172,12 +174,8 @@ def calculate_logpval_DT(data,gm_model,DT):
             data_gmm_idx0,data_gmm_idx1 = temp_id0,temp_id1
             idx0,idx1 = 0,1
         temp_gmm = gm_model[temp_id0][temp_id1]
-        if temp_id0<temp_id1:
-            post = temp_gmm.predict_proba(np.hstack(
-                (data[:,temp_id0],data[:,temp_id1])))
-        else:
-            post = temp_gmm.predict_proba(np.hstack(
-                (data[:,temp_id1],data[:,temp_id0])))
+        post = temp_gmm.predict_proba(np.hstack(
+            (data[:,data_gmm_idx0],data[:,data_gmm_idx1])))
 
         N,M = post.shape
         #calculate parent log pvalue

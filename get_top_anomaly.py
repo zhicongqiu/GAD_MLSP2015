@@ -30,8 +30,8 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
                         MI_subset.append([])
                         for k in range(0,len(f_subset)):
                             if j<k:
-                                GMM_subset[j].append(GMM_subset[j][i])
-                                MI_subset[j].append(MI_subset[j][i])
+                                GMM_subset[j].append(GMM_subset[k][j])
+                                MI_subset[j].append(MI_subset[k][j])
                             else:
                                 GMM_subset[j].append(
                                     GMM_pairwise[f_subset[j]][f_subset[k]])
@@ -70,10 +70,9 @@ if __name__ == '__main__':
     #set the max order be the number of features
     _, max_order = TRAIN.shape
     #get pairwise gmm clusters from DATA
-    GMM_pairwise = get_all_pairwise_gmm(TRAIN,M_max) 
+    num_comp,GMM_pair = get_all_pairwise_gmm(TRAIN,M_max) 
     #get mutual info for each gm pair, by mc sampling
-    MI_pairwise = get_all_pairwise_MI(GMM_pair)
-    anomaly_list = get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,
-                                   max_order,500,True,float('inf'))
+    MI_pair = get_all_pairwise_MI(GMM_pair)
+    anomaly_list = get_top_anomaly(DATA,GMM_pair,MI_pair)
     roc_auc = calculate_roc(anomaly_list,LABEL,normal_cat)
     print 'the final roc is ' + str(roc_auc)
