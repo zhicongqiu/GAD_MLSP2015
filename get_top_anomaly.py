@@ -60,18 +60,20 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
             del index_set[i]
 
 if __name__ == '__main__':
-
+    
+    TRAIN = numpy.loadtxt('train.txt')
     DATA = numpy.loadtxt('data.txt')
     LABEL = numpy.loadtxt('label.txt')
+    normal_cat = 1
     #max number of component per gmm models
     M_max = 50
     #set the max order be the number of features
-    _, max_order = DATA.shape
-    #get pairwise gmms
-    GMM_pairwise = get_all_pairwise_gmm(DATA,M_max) 
-    #get mutual info for each pair, by mc sampling
+    _, max_order = TRAIN.shape
+    #get pairwise gmm clusters from DATA
+    GMM_pairwise = get_all_pairwise_gmm(TRAIN,M_max) 
+    #get mutual info for each gm pair, by mc sampling
     MI_pairwise = get_all_pairwise_MI(GMM_pair)
     anomaly_list = get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,
                                    max_order,500,True,float('inf'))
-    roc_auc = calculate_roc(anomaly_list,LABEL)
+    roc_auc = calculate_roc(anomaly_list,LABEL,normal_cat)
     print 'the final roc is ' + str(roc_auc)
