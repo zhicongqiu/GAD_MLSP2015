@@ -266,3 +266,21 @@ def calculate_roc(anomaly_list,LABEL,normal_cat):
             roc_auc+=TD
             FA+=1
     return roc_auc/(TD*FA)
+
+def get_subset_DATA_GMM_MI(DATA,GMM_pairwise,MI_pairwise,f_subset):
+    DATA_subset = DATA[list(f_subset)][:,list(f_subset)]
+    GMM_subset = []
+    MI_subset = []
+    for j in range(0,len(f_subset)):
+        GMM_subset.append([])
+        MI_subset.append([])
+        for k in range(0,len(f_subset)):
+            if j<k:
+                GMM_subset[j].append(GMM_subset[k][j])
+                MI_subset[j].append(MI_subset[k][j])
+            else:
+                GMM_subset[j].append(
+                    GMM_pairwise[f_subset[j]][f_subset[k]])
+                MI_subset[j].append(
+                    MI_pairwise[f_subset[j]][f_subset[k]])
+    return DATA_subset,GMM_subset,MI_subset
