@@ -83,10 +83,10 @@ def get_single_gm_score(sample,gm_double,which):
     g_x = mixture.GMM(n_components = M,covariance_type='full')
     g_x.weights_ = gm_double.weights_
     g_x.means_ = gm_double.means_[:,which]
-    g_x.covars_ = np.array([])
+    temp_covar = []
     for i in range(M):
-        g_x.covars_.append(gm_double.covars_[i,which,which])
-
+        temp_covar.append(gm_double.covars_[i,which,which])
+    g_x.covars_ = np.array(temp_covar)
     return g_x.score(sample[which])
 
 #get dependence tree structure for a feature subset
