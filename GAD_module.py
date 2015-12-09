@@ -29,15 +29,18 @@ def get_all_pairwise_gmm(DATA,M_max):
 #for the same feature index, MI = 0
 def get_all_pairwise_MI(GMM_pair):
     MI_pair = [[0 for i in range(len(GMM_pair))] for j in range(len(GMM_pair))]
+    occur =  [[0 for i in range(len(GMM_pair))] for j in range(len(GMM_pair))]
     count = 0
     for i in range(len(GMM_pair)):
         for j in range(i+1,len(GMM_pair)):
-            MI_pair[i][j] = get_pair_mutual_info(GMM_pair[i][j])
-            if MI_pair<0:
-                raise ValueError('Mutual Information cannot be negative')
-            elif MI_pair<1e-10:
+            print 'starting evaluating MI pairs '+str(i)+' '+str(j)+'\n'
+            MI_pair[i][j],occur[i][j] = get_pair_mutual_info(GMM_pair[i][j])
+            if MI_pair[i][j]<0:
+                print 'MI is negative: '+str(MI_pair[i][j])
+                #raise ValueError('Mutual Information cannot be negative')
+            elif MI_pair[i][j]<1e-10 and MI_pair[i][j]>=0:
                 #avoid assigning too small MI
-                MI_pair = 1e-10
+                MI_pair[i][j] = 1e-10
             MI_pair[j][i] = MI_pair[i][j]
             count+=1
     return MI_pair
@@ -46,15 +49,15 @@ def get_all_pairwise_MI(GMM_pair):
 #by MC sampling, number of generated samples fixed to 1e6
 def get_pair_mutual_info(gm_model):
 
-    #total mc trials
-    total_trials = 1e6
+    #total mc trials is 1e5
+    total_trials = 1e5
     #get the sorted weight index
     M = len(gm_model.weights_)
     weight_index_sorted = sorted(range(M), 
                                  key=lambda k: gm_model.weights_[k])
     weight_cumsum = np.cumsum(gm_model.weights_[weight_index_sorted])
-    #simulate 1e6 MC
     count = 0
+    occur = 0
     MI = 0.
     while count<total_trials:
         #generate a random number
@@ -71,22 +74,30 @@ def get_pair_mutual_info(gm_model):
         #x and y score
         temp_score_x = get_single_gm_score(rand_num,gm_model,0)
         temp_score_y = get_single_gm_score(rand_num,gm_model,1)
+
         #sample mutual info
         if temp_score_x!=0 and temp_score_y!=0 and temp_score_xy!=0:
-            MI += (temp_score_xy-temp_score_x-temp_score_y)
+            sample_MI = temp_score_xy-temp_score_x-temp_score_y
+            if sample_MI<0:
+                #print str(sample_MI)+' is negative \n'
+                occur+=1
+                #raise ValueError('MI sample cannot be negative')
+            MI += sample_MI
         count+=1
-    return MI/total_trials
+    return MI/total_trials,occur
 
 #generate score on a single dim specified by which
 def get_single_gm_score(sample,gm_double,which):
     M = gm_double.weights_.size
-    g_x = mixture.GMM(n_components = M,covariance_type='full')
+    g_x = mixture.GMM(n_components = M)
     g_x.weights_ = gm_double.weights_
-    g_x.means_ = gm_double.means_[:,which]
+    g_x.means_ = gm_double.means_[:,which].reshape(-1,1)
+    #print str(g_x.means_.shape)
     temp_covar = []
     for i in range(M):
         temp_covar.append(gm_double.covars_[i,which,which])
-    g_x.covars_ = np.array(temp_covar)
+    g_x.covars_ = np.array(temp_covar).reshape(-1,1)
+    #print str(g_x.covars_.shape)
     return g_x.score(sample[which])
 
 #get dependence tree structure for a feature subset

@@ -2,7 +2,7 @@ import numpy as np
 import sklearn
 import math
 import itertools
-from GAD_module import *
+import GAD_module as GAD
 #learn background models
 #learning pairwise gmms
 
@@ -110,12 +110,12 @@ if __name__ == '__main__':
     M_max = 50
     _,K = TRAIN.shape
     #get pairwise gmm clusters from DATA
-    num_comp,GMM_pair = get_all_pairwise_gmm(TRAIN,M_max) 
+    num_comp,GMM_pair = GAD.get_all_pairwise_gmm(TRAIN,M_max) 
     '''
     #get mutual info for each gm pair, by mc sampling
-    MI_pair = get_all_pairwise_MI(GMM_pair)
+    MI_pair = GAD.get_all_pairwise_MI(GMM_pair)
     #set the order be the number of features to ensure monotonicity
     anomaly_list = get_top_anomaly(DATA,GMM_pair,MI_pair,K/2)
-    roc_auc = calculate_roc(anomaly_list,LABEL,normal_cat)
+    roc_auc = GAD.calculate_roc(anomaly_list,LABEL,normal_cat)
     print 'the final roc is ' + str(roc_auc)
     '''
