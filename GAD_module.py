@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from scipy.stats import mvn
+from scipy.stats import mvn,norm
 from sklearn import mixture
 from gmm_module import *
 import networkx as nx
@@ -104,7 +104,7 @@ def get_single_gm_score(sample,gm_double,which):
 def get_DT(MI_subset):
     #we use networkx package
     #create a Graph object
-    G = networkx.Graph()
+    G = nx.Graph()
     G.add_nodes_from(range(len(MI_subset)))
     edge_list = []
     for i in range(len(MI_subset)):
@@ -118,18 +118,21 @@ def get_DT(MI_subset):
     N = len(min_span_tree)
     #indicates which nodes are added, hence they are not children
     indicator = np.zeros((N+1,1)) #add 1 to compensate for N edges and N+1 nodes
-    rearranged = [list(min_span_tree.pop(0))]
-    indicator[[rearrange[0][0],rearrange[0][1]]] = 1 #default parents
-    while not min_span_tree:
-        for ins in len(min_span_tree):
+    temp1,temp2,_ = min_span_tree.pop(0)
+    rearranged = [[temp1,temp2]]
+    indicator[[rearranged[0][0],rearranged[0][1]]] = 1 #default parents
+    while min_span_tree:
+        for ins in range(len(min_span_tree)):
             if indicator[min_span_tree[ins][0]]==1:
-                temp1,temp2 = min_span_tree.pop(ins)
-                rearrange.append([temp1,temp2])
+                temp1,temp2,_ = min_span_tree.pop(ins)
+                rearranged.append([temp1,temp2])
                 indicator[temp2] = 1
+                break
             elif indicator[min_span_tree[ins][1]]==1:
-                temp1,temp2 = min_span_tree.pop(ins)
-                rearrange.append([temp2,temp1])
+                temp1,temp2,_ = min_span_tree.pop(ins)
+                rearranged.append([temp2,temp1])
                 indicator[temp1] = 1
+                break
     return rearranged
 
 #get the subset score specified by node (feature) index
@@ -205,9 +208,16 @@ def calculate_logpval_DT(data,gm_model,DT):
         #get single dimension pval with uniform weights
         temp_single = get_single_pval(data[:,temp_id0],
                                          temp_gmm.means_[:,idx0],
-                                         co,np.ones((M,1)))
+                                         co,np.ones((N,M)))
         temp_double = get_double_pval(data[:,[data_gmm_idx0,data_gmm_idx1]],
                                       temp_gmm,post)
+        #sanity check, joint is less than single
+        for n in range(0,N):
+            for j in range(0,M):
+                if (temp_single[n,j]>=temp_double[n,j])==False:
+                    print ((temp_double[n,j],temp_single[n,j],
+                            temp_double[n,j]/temp_single[n,j]))
+                    temp_double[n,j] = temp_single[n,j]
         temp_logpval+=np.log(np.sum(temp_double/temp_single,axis = 1))
             
                                          
@@ -218,19 +228,20 @@ def get_single_pval(data,gm_means,gm_covars,post):
 
     #get double-sided p-value
     N,M = post.shape
-    single_logpval = np.zeros((N,M))
+    #print((N,M))
+    single_pval = np.zeros((N,M))
     for j in range(0,N):
         for i in range(0,M):
-            temp_ef = math.erfc((data[j]-gm_means[i])/
-                                   np.sqrt(gm_covars[i]))
-            if temp_ef<=0.5:
-                single_logpval[j][i]=temp_ef*2
+            if data[j]<=gm_means[i]:
+                single_pval[j][i] = 2*norm.cdf((data[j]-gm_means[i])/
+                                     np.sqrt(gm_covars[i]))
             else:
-                single_pval[j][i]=2*(1-temp_ef)
+                single_pval[j][i] = 2*(1-norm.cdf((data[j]-gm_means[i])/
+                                        np.sqrt(gm_covars[i])))
             #smallest p-value used is 1e-100
-            if single_pval[j][i]<1e-100:
-                single_pval[j][i] = 1e-100
-            single_pval[j][i]=single_pval[j][i]*post[i]
+            if single_pval[j][i]<1e-10:
+                single_pval[j][i] = 1e-10
+            single_pval[j][i]=single_pval[j][i]*post[j][i]
     return single_pval
 
 def get_double_pval(data,gmm,post):
@@ -238,39 +249,38 @@ def get_double_pval(data,gmm,post):
     #four possibilities relative to mu and data
     N,M = post.shape
     temp_double = np.zeros((N,M))
+    
     for n in range(0,N):
         for j in range(0,M):
-            mean_target = gmm.means_[j,:]
-            cov_target = gmm.covars_[j,:,:]
+            #print n,j
+            mean_target = gmm.means_[j]
+            cov_target = gmm.covars_[j]
             #first quadrant w.r.t. mu[j,:]
             if (data[n,0]>=mean_target[0]
                 and data[n,1]>=mean_target[1]):
-                temp_double[n][j] =\
-                            4*mvn.mvnun(np.array([data[n,0],data[n,1]]),
-                            np.array([1e6,1e6]),
-                            mean_target,cov_target)
+                temp_double[n][j],_ = mvn.mvnun(np.array([data[n,0],data[n,1]]),
+                                                np.array([1e4,1e4]),
+                                                mean_target,cov_target)
             elif (data[n,0]<=mean_target[0]
                   and data[n,1]<=mean_target[1]):
-                temp_double[n][j] =\
-                            4*mvn.mvnun(np.array([-1e6,-1e6]),
-                            np.array([data[n,0],data[n,1]]),
-                            mean_target,cov_target)
+                temp_double[n][j],_ = mvn.mvnun(np.array([-1e2,-1e2]),
+                                                np.array([data[n,0],data[n,1]]),
+                                                mean_target,cov_target)
             elif (data[n,0]<=mean_target[0]
                   and data[n,1]>=mean_target[1]):
-                temp_double[n][j] =\
-                            4*mvn.mvnun(np.array([-1e6,data[n,1]]),
-                            np.array([data[n,0],1e6]),
-                            mean_target,cov_target)
+                temp_double[n][j],_ = mvn.mvnun(np.array([-1e2,1e4]),
+                                                np.array([data[n,0],data[n,1]]),
+                                                mean_target,cov_target)
             elif (data[n,0]>=mean_target[0]
                   and data[n,1]<=mean_target[1]):
-                temp_double[n][j] =\
-                            4*mvn.mvnun(np.array([data[n,0],-1e6]),
-                            np.array([1e6,data[n,1]]),
-                            mean_target,cov_target)
+                temp_double[n][j],_ = mvn.mvnun(np.array([data[n,0],data[n,1]]),
+                                                np.array([1e4,-1e2]),
+                                                mean_target,cov_target)
+            temp_double[n][j] = temp_double[n][j]*4
             #smallest p-value used is 1e-100
-            if temp_double[n][j]<1e-100:
-                temp_double[n][j] = 1e-100
-            temp_double[n][j] = temp_double[n][j]*post[j]
+            if temp_double[n][j]>=1e-10:
+                temp_double[n][j] = 1e-10
+            temp_double[n][j] = temp_double[n][j]*post[n][j]
     return temp_double
 
 def calculate_roc(anomaly_list,LABEL,normal_cat):
