@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import mvn
 from sklearn import mixture
 from gmm_module import *
-from MinimumSpanningTree import *
+import networkx as nx
 
 #generate gmm pairwise models
 def get_all_pairwise_gmm(DATA,M_max):
@@ -11,16 +11,16 @@ def get_all_pairwise_gmm(DATA,M_max):
     GMM_pair = []
     num_comp = []
     for i in range(0,K):
-        GMM_pair[i].append([])
+        GMM_pair.append([])
         for j in range(0,K):
             if j<i:
                 GMM_pair[i].append(GMM_pair[j][i])
             elif j==i:
-                temp_num,gmm = GMM_BIC(DATA[:,i],M_max)
+                temp_num,gmm = GMM_BIC(DATA[:,i].reshape(-1,1),M_max)
                 GMM_pair[i].append(gmm) 
                 num_comp.append(temp_num)
             else:
-                temp_num,gmm = GMM_BIC(np.hstack((DATA[:,i],DATA[:,j])),M_max)
+                temp_num,gmm = GMM_BIC(DATA[:,[i,j]],M_max)
                 GMM_pair[i].append(gmm)
                 num_comp.append(temp_num)
     return num_comp,GMM_pair
@@ -91,9 +91,18 @@ def get_single_gm_score(sample,gm_double,which):
 
 #get dependence tree structure for a feature subset
 def get_DT(MI_subset):
-    #we use Eppstein's MST implementation
-    #we negate MI, turning into a MST problem
-    min_span_tree = MinimumSpanningTree(-MI_subset)
+    #we use networkx package
+    #create a Graph object
+    G = networkx.Graph()
+    G.add_nodes_from(range(len(MI_subset)))
+    edge_list = []
+    for i in range(len(MI_subset)):
+        for j in range(i+1,len(MI_subset)):
+            #we negate MI, turning into a MST problem
+            edge_list.extend([(i,j,-MI_subset[i][j]),(j,i,-MI_subset[j][i])])
+    G.add_weighted_edges_from(edge_list)
+    
+    min_span_tree = sorted(list(nx.minimum_spanning_edges(G)))
     #rearrange the mst s.t. all 1st axis is parents of 2nd axis
     N = len(min_span_tree)
     #indicates which nodes are added, hence they are not children
@@ -137,7 +146,7 @@ def get_subset_score(data,mi,gm_model,N,K):
         for i in range(1,data_logpval):
             if (N-count)*np.exp(data_logpval[logpval_index_sorted[i]])<1:
                 count+=1
-                sub_seq.append(logpval_index_sorted[i]))
+                sub_seq.append(logpval_index_sorted[i])
                 log_p+=data_logpval[logpval_index_sorted[i]]
             else:
                 break
@@ -158,7 +167,7 @@ def calculate_logpval_DT(data,gm_model,DT):
     temp_id0,temp_id1 = DT[0][0],DT[0][1]
     temp_gmm = gm_model[temp_id0][temp_id0]
 
-    post = temp_gmm.predict_proba(data[:][:,temp_id0])
+    post = temp_gmm.predict_proba(data[:,temp_id0].reshape(-1,1))
     #get double-sided p-value
     temp_logpval = np.log(np.sum(get_single_pval(data[:,temp_id0],
                                                  temp_gmm.means_,
@@ -174,8 +183,7 @@ def calculate_logpval_DT(data,gm_model,DT):
             data_gmm_idx0,data_gmm_idx1 = temp_id0,temp_id1
             idx0,idx1 = 0,1
         temp_gmm = gm_model[temp_id0][temp_id1]
-        post = temp_gmm.predict_proba(np.hstack(
-            (data[:,data_gmm_idx0],data[:,data_gmm_idx1])))
+        post = temp_gmm.predict_proba(data[:,[data_gmm_idx0,data_gmm_idx1]])
 
         N,M = post.shape
         #calculate parent log pvalue
@@ -187,9 +195,8 @@ def calculate_logpval_DT(data,gm_model,DT):
         temp_single = get_single_pval(data[:,temp_id0],
                                          temp_gmm.means_[:,idx0],
                                          co,np.ones((M,1)))
-        temp_double = get_double_pval(np.hstack((data[:,data_gmm_idx0],
-                                                    data[:,data_gmm_idx1])),
-                                         temp_gmm,post)
+        temp_double = get_double_pval(data[:,[data_gmm_idx0,data_gmm_idx1]],
+                                      temp_gmm,post)
         temp_logpval+=np.log(np.sum(temp_double/temp_single,axis = 1))
             
                                          
@@ -228,25 +235,25 @@ def get_double_pval(data,gmm,post):
             if (data[n,0]>=mean_target[0]
                 and data[n,1]>=mean_target[1]):
                 temp_double[n][j] =\
-                4*mvn.mvnun(np.array([data[n,0],data[n,1]]),
+                            4*mvn.mvnun(np.array([data[n,0],data[n,1]]),
                             np.array([1e6,1e6]),
                             mean_target,cov_target)
             elif (data[n,0]<=mean_target[0]
                   and data[n,1]<=mean_target[1]):
-                temp_double[n][j] =\ 
-                4*mvn.mvnun(np.array([-1e6,-1e6]),
+                temp_double[n][j] =\
+                            4*mvn.mvnun(np.array([-1e6,-1e6]),
                             np.array([data[n,0],data[n,1]]),
                             mean_target,cov_target)
             elif (data[n,0]<=mean_target[0]
                   and data[n,1]>=mean_target[1]):
-                temp_double[n][j] =\ 
-                4*mvn.mvnun(np.array([-1e6,data[n,1]]),
+                temp_double[n][j] =\
+                            4*mvn.mvnun(np.array([-1e6,data[n,1]]),
                             np.array([data[n,0],1e6]),
                             mean_target,cov_target)
             elif (data[n,0]>=mean_target[0]
                   and data[n,1]<=mean_target[1]):
                 temp_double[n][j] =\
-                4*mvn.mvnun(np.array([data[n,0],-1e6]),
+                            4*mvn.mvnun(np.array([data[n,0],-1e6]),
                             np.array([1e6,data[n,1]]),
                             mean_target,cov_target)
             #smallest p-value used is 1e-100
