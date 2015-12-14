@@ -1,4 +1,4 @@
-import math
+1import math
 import numpy as np
 from scipy.stats import mvn,norm
 from sklearn import mixture
@@ -183,10 +183,9 @@ def calculate_logpval_DT(data,gm_model,DT):
 
     post = temp_gmm.predict_proba(data[:,temp_id0].reshape(-1,1))
     #get double-sided p-value
-    temp_logpval = np.log(np.sum(get_single_pval(data[:,temp_id0],
-                                                 temp_gmm.means_,
-                                                 temp_gmm.covars_,post),
-                                 axis=1))
+    temp_logpval = np.log(get_single_pval(data[:,temp_id0],
+                                          temp_gmm.means_,
+                                          temp_gmm.covars_,post))
     for i in range(0,len(DT)):
         temp_id0,temp_id1 = DT[i][0],DT[i][1]
         #use idx0,idx1 to indicate which of the (x,y) is parent
@@ -201,7 +200,7 @@ def calculate_logpval_DT(data,gm_model,DT):
 
         N,M = post.shape
         #calculate parent log pvalue
-
+        '''
         co = []
         for j in range(0,M):
             co.append(temp_gmm.covars_[j,idx0,idx0])
@@ -219,6 +218,10 @@ def calculate_logpval_DT(data,gm_model,DT):
                             temp_double[n,j]/temp_single[n,j]))
                     temp_double[n,j] = temp_single[n,j]
         temp_logpval+=np.log(np.sum(temp_double/temp_single,axis = 1))
+        '''
+        temp_cond = get_cond_pval(data[:,[data_gmm_idx0,data_gmm_idx1]],
+                                  temp_gmm,idx1,idx0,post)
+        temp_logpval+=np.log(temp_cond)
             
                                          
     return temp_logpval
@@ -242,8 +245,38 @@ def get_single_pval(data,gm_means,gm_covars,post):
             if single_pval[j][i]<1e-10:
                 single_pval[j][i] = 1e-10
             single_pval[j][i]=single_pval[j][i]*post[j][i]
-    return single_pval
+    return np.sum(single_pval,axis=1)
 
+def get_cond_pval(data,gmm,x,y,post):
+    #we want pval(x|y)
+    N,_ = data.shape
+    M = gmm.weights_.size
+    row = []
+    #M*N matrix
+    cond_mean = []
+    #1*M matrix
+    cond_var = []
+    for i in range(M):
+        row.append(gmm.covars_[i,x,y]/
+                   (np.sqrt(gmm.covars_[i,x,x]*gmm.covars_[i,y,y])))
+    
+        cond_mean.append(gmm.means_[i,x]-
+                         row[i]*np.sqrt(gmm.covars_[i,x,x]/gmm.covars_[i,y,y])*
+                         (data[:,y].reshape(-1,1)-gmm.means_[i,y]))
+        cond_var.append(gmm.covars_[i,x,x]*(1-row[i]**2))
+    cond_pval = np.zeros((N,1))
+    for j in range(N):
+        for i in range(M):
+            if data[j,x]<=cond_mean[i][j]:
+                cond_pval[j]+=(post(i)*2*norm.cdf((data[j,x]-cond_mean[i][j])/
+                                                  np.sqrt(cond_var[i])))
+            else:
+                cond_pval[j]+=(post(i)*2*(1-norm.cdf((data[j,x]-cond_mean[i][j])/
+                                                     np.sqrt(cond_var[i]))))
+    return cond_pval
+
+'''
+#potential problems with mvn.mvnun
 def get_double_pval(data,gmm,post):
     #calculate joint pvalue for each data sample
     #four possibilities relative to mu and data
@@ -282,6 +315,7 @@ def get_double_pval(data,gmm,post):
                 temp_double[n][j] = 1e-10
             temp_double[n][j] = temp_double[n][j]*post[n][j]
     return temp_double
+'''
 
 def calculate_roc(anomaly_list,LABEL,normal_cat):
     #calculate roc auc given the index of LABEL

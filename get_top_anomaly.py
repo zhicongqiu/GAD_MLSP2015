@@ -110,12 +110,10 @@ if __name__ == '__main__':
     M_max = 50
     _,K = TRAIN.shape
     #get pairwise gmm clusters from DATA
-    num_comp,GMM_pair = GAD.get_all_pairwise_gmm(TRAIN,M_max) 
-    '''
+    num_comp,GMM_pair = GAD.get_all_pairwise_gmm(TRAIN,M_max)                                                
     #get mutual info for each gm pair, by mc sampling
     MI_pair = GAD.get_all_pairwise_MI(GMM_pair)
     #set the order be the number of features to ensure monotonicity
     anomaly_list = get_top_anomaly(DATA,GMM_pair,MI_pair,K/2)
     roc_auc = GAD.calculate_roc(anomaly_list,LABEL,normal_cat)
-    print 'the final roc is ' + str(roc_auc)
-    '''
+    print 'the final roc is ' + str(roc_auc)    
