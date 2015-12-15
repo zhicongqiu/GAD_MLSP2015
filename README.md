@@ -1,8 +1,14 @@
 # GAD_MLSP2015
 
-main file is in get_top_anomaly
+main file is get_top_anomaly
 
 goal: extract group anomalies from DATA
+
+Based on our MLSP paper:
+Detecting Clusters of Anomalies on Low-Dimensional Feature Subsets with
+Application to Network Traffic Flow Data
+
+Paper arvix link: http://arxiv.org/pdf/1511.01047.pdf
 
 ask author for source file
 
