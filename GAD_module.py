@@ -1,4 +1,4 @@
-1import math
+import math
 import numpy as np
 from scipy.stats import mvn,norm
 from sklearn import mixture
@@ -27,14 +27,14 @@ def get_all_pairwise_gmm(DATA,M_max):
 
 #get all pairwise gmms' MI
 #for the same feature index, MI = 0
-def get_all_pairwise_MI(GMM_pair):
+def get_all_pairwise_MI(GMM_pair,total_trials):
     MI_pair = [[0 for i in range(len(GMM_pair))] for j in range(len(GMM_pair))]
     occur =  [[0 for i in range(len(GMM_pair))] for j in range(len(GMM_pair))]
     count = 0
     for i in range(len(GMM_pair)):
         for j in range(i+1,len(GMM_pair)):
             print 'starting evaluating MI pairs '+str(i)+' '+str(j)+'\n'
-            MI_pair[i][j],occur[i][j] = get_pair_mutual_info(GMM_pair[i][j])
+            MI_pair[i][j],occur[i][j] = get_pair_mutual_info(GMM_pair[i][j],total_trials)
             if MI_pair[i][j]<0:
                 print 'MI is negative: '+str(MI_pair[i][j])
                 #raise ValueError('Mutual Information cannot be negative')
@@ -47,10 +47,10 @@ def get_all_pairwise_MI(GMM_pair):
 
 #get mutual information of a pair of r.v.
 #by MC sampling, number of generated samples fixed to 1e6
-def get_pair_mutual_info(gm_model):
+def get_pair_mutual_info(gm_model,total_trials):
 
     #total mc trials is 1e5
-    total_trials = 1e5
+    #total_trials = 1e5
     #get the sorted weight index
     M = len(gm_model.weights_)
     weight_index_sorted = sorted(range(M), 
@@ -138,16 +138,16 @@ def get_DT(MI_subset):
 #get the subset score specified by node (feature) index
 #Note: we should not consider more than N/2 samples or more than K/2 features.
 #This is because the Bonferroni score is monotonic in [0, N/2] and [0, K/2]
-def get_subset_score(data,mi,gm_model,N,K):
+def get_subset_score(DT,data_logpval,N,K,KK):
     #N: total number of samples
     #K: total number of original features
 
     #get the number of subset features
-    _,KK = data.shape
+    #_,KK = data.shape
     #learn a DT on the feature subset
-    DT = get_DT(mi)
+    #DT = get_DT(mi)
     #calculate DT p-value for each sample
-    data_logpval = calculate_logpval_DT(data,gm_model,DT)
+    #data_logpval = calculate_logpval_DT(data,gm_model,DT)
     # sorted pval in ascending order
     logpval_index_sorted = sorted(range(N), 
                                key=lambda k: data_logpval[k])
@@ -157,7 +157,7 @@ def get_subset_score(data,mi,gm_model,N,K):
     log_p = data_logpval[logpval_index_sorted[0]]
     count = 1
     if N>1:
-        for i in range(1,data_logpval):
+        for i in range(1,data_logpval.size):
             if (N-count)*np.exp(data_logpval[logpval_index_sorted[i]])<1:
                 count+=1
                 sub_seq.append(logpval_index_sorted[i])
@@ -167,10 +167,10 @@ def get_subset_score(data,mi,gm_model,N,K):
     #calculate the log of score
     log_score = log_p
     #number of samples correction
-    log_score -= np.cumsum(np.log(range(2,N-count+1)))
+    log_score -= np.sum(np.log(range(2,N-count+1)))
     #number of features correction
-    log_score -= np.cumsum(np.log(range(2,KK+1)))
-    log_score -= np.cumsum(np.log(range(2,K-KK+1)))
+    log_score -= np.sum(np.log(range(2,KK+1)))
+    log_score -= np.sum(np.log(range(2,K-KK+1)))
 
     return log_score,sub_seq
                 
@@ -232,20 +232,20 @@ def get_single_pval(data,gm_means,gm_covars,post):
     #get double-sided p-value
     N,M = post.shape
     #print((N,M))
-    single_pval = np.zeros((N,M))
+    single_pval = np.zeros((N,1))
     for j in range(0,N):
         for i in range(0,M):
+            temp_cdf = norm.cdf((data[j]-gm_means[i])/
+                                np.sqrt(gm_covars[i]))
             if data[j]<=gm_means[i]:
-                single_pval[j][i] = 2*norm.cdf((data[j]-gm_means[i])/
-                                     np.sqrt(gm_covars[i]))
+                single_pval[j] += 2*temp_cdf*post[j][i]
             else:
-                single_pval[j][i] = 2*(1-norm.cdf((data[j]-gm_means[i])/
-                                        np.sqrt(gm_covars[i])))
+                single_pval[j] += 2*(1-temp_cdf)*post[j][i]
             #smallest p-value used is 1e-100
-            if single_pval[j][i]<1e-10:
-                single_pval[j][i] = 1e-10
-            single_pval[j][i]=single_pval[j][i]*post[j][i]
-    return np.sum(single_pval,axis=1)
+        if single_pval[j]<1e-10:
+            single_pval[j] = 1e-10
+
+    return single_pval
 
 def get_cond_pval(data,gmm,x,y,post):
     #we want pval(x|y)
@@ -267,12 +267,15 @@ def get_cond_pval(data,gmm,x,y,post):
     cond_pval = np.zeros((N,1))
     for j in range(N):
         for i in range(M):
+            temp_cdf = norm.cdf((data[j,x]-cond_mean[i][j])/
+                                np.sqrt(cond_var[i]))
             if data[j,x]<=cond_mean[i][j]:
-                cond_pval[j]+=(post(i)*2*norm.cdf((data[j,x]-cond_mean[i][j])/
-                                                  np.sqrt(cond_var[i])))
+                cond_pval[j]+=(post[j][i]*2*temp_cdf)
             else:
-                cond_pval[j]+=(post(i)*2*(1-norm.cdf((data[j,x]-cond_mean[i][j])/
-                                                     np.sqrt(cond_var[i]))))
+                cond_pval[j]+=(post[j][i]*2*(1-temp_cdf))
+        if cond_pval[j]<1e-10:
+            cond_pval[j] = 1e-10
+
     return cond_pval
 
 '''

@@ -26,9 +26,13 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
                     #get the subset matrices
                     DATA_subset,GMM_subset,MI_subset = \
                     get_subset_DATA_GMM_MI(DATA,GMM_pairwise,MI_pairwise,f_subset)
+                    #learn a DT on the feature subset
+                    DT = get_DT(MI_subset)
+                    #calculate DT p-value for each sample
+                    data_logpval = calculate_logpval_DT(DATA_subset,GMM_subset,DT)
                     #calculate the subset score
                     subset_score, subset_seq = \
-                    get_subset_score(DATA_subset,MI_subset,GMM_subset,N,K)
+                    get_subset_score(DT,data_logpval,N,K,len(f_subset))
                     if subset_score < temp_score:
                         temp_score = subset_score
                         temp_seq = subset_seq
@@ -99,6 +103,7 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
         for i in temp_seq:
             np.delete(DATA,i,axis=0)
             del index_set[i]
+    return SEQ,BEST
 
 if __name__ == '__main__':
     
@@ -112,8 +117,8 @@ if __name__ == '__main__':
     #get pairwise gmm clusters from DATA
     num_comp,GMM_pair = GAD.get_all_pairwise_gmm(TRAIN,M_max)                                                
     #get mutual info for each gm pair, by mc sampling
-    MI_pair = GAD.get_all_pairwise_MI(GMM_pair)
+    MI_pair = GAD.get_all_pairwise_MI(GMM_pair,1e4)
     #set the order be the number of features to ensure monotonicity
-    anomaly_list = get_top_anomaly(DATA,GMM_pair,MI_pair,K/2)
+    anomaly_list,BEST = get_top_anomaly(DATA,GMM_pair,MI_pair,K/2)
     roc_auc = GAD.calculate_roc(anomaly_list,LABEL,normal_cat)
     print 'the final roc is ' + str(roc_auc)    
