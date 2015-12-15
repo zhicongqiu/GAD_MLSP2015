@@ -19,20 +19,23 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
     while len(SEQ)<top_list:        
         temp_score = 0
         N,K = DATA.shape #N samples and K features
-        for i in range(1,max_order+1):
+        for i in range(2,max_order+1):
+            print('evaluating order '+str(i)+'\n')
             TA_list = []
             if i<=start_TA or all == True:
+                #here, f_subset is always sorted in ascending order
                 for f_subset in itertools.combinations(feature_set,i):
                     #get the subset matrices
                     DATA_subset,GMM_subset,MI_subset = \
-                    get_subset_DATA_GMM_MI(DATA,GMM_pairwise,MI_pairwise,f_subset)
+                    GAD.get_subset_DATA_GMM_MI(DATA,GMM_pairwise,MI_pairwise,f_subset)
                     #learn a DT on the feature subset
-                    DT = get_DT(MI_subset)
+                    DT = GAD.get_DT(MI_subset)
                     #calculate DT p-value for each sample
-                    data_logpval = calculate_logpval_DT(DATA_subset,GMM_subset,DT)
+                    data_logpval = GAD.calculate_logpval_DT(DATA_subset,GMM_subset,DT)
+                    #print('size of log pval'+str(data_logpval.shape))
                     #calculate the subset score
                     subset_score, subset_seq = \
-                    get_subset_score(DT,data_logpval,N,K,len(f_subset))
+                    GAD.get_subset_score(DT,data_logpval,N,K,len(f_subset))
                     if subset_score < temp_score:
                         temp_score = subset_score
                         temp_seq = subset_seq
@@ -79,11 +82,15 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
                                 tried_list.append(valid_trial)
                                 #get the subset matrices
                                 DATA_subset,GMM_subset,MI_subset = \
-                                get_subset_DATA_GMM_MI(DATA,GMM_pairwise,
+                                GAD.get_subset_DATA_GMM_MI(DATA,GMM_pairwise,
                                                        MI_pairwise,valid_trial)
+                                #learn a DT on the feature subset
+                                DT = GAD.get_DT(MI_subset)
+                                #calculate DT p-value for each sample
+                                data_logpval = GAD.calculate_logpval_DT(DATA_subset,GMM_subset,DT)
                                 #calculate the subset score
                                 subset_score, subset_seq = \
-                                get_subset_score(DATA_subset,MI_subset,GMM_subset,N,K)
+                                GAD.get_subset_score(DT,data_logpval,N,K,len(f_subset))
                                 if subset_score < temp_score:
                                     temp_score = subset_score
                                     temp_seq = subset_seq
