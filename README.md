@@ -39,6 +39,7 @@ http://proceedings.spiedigitallibrary.org/proceeding.aspx?articleid=1881997
 Pending journal paper that describes a both active and semi-supervised framework for >2 (generally novel/rare) classes.
 
 ###################################################
+-----------------------------------------------------
 Variables:
 
 TRAIN:
