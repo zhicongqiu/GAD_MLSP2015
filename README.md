@@ -1,10 +1,10 @@
 # GAD_MLSP2015
 
-main file:
+MAIN FILE:
 
 get_top_anomaly.py
 
-goal: 
+GOAL: 
 
 extract prioritized clusters of anomalous samples and their salient (continuous, real-valued) feature subsets from DATA
 
@@ -26,9 +26,7 @@ MLSP'15 IEEE Xplore:
 http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber=7324326&tag=1
 
 
-Also see:
-
-Actively learning to distinguish suspicious from innocuous anomalies in a batch of vehicle tracks
+Also see: actively learning to distinguish suspicious from innocuous anomalies in a batch of vehicle tracks
 
 Active learning paper in spie for 2 classes to distinguish suspicious from innocuous anomalies.
 
