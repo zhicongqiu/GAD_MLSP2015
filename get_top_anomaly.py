@@ -13,7 +13,7 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
     BEST = []
     SEQ = []
     N,K = DATA.shape
-    index_set = range(0,N)
+    index_set = np.array(range(0,N))
     feature_set = range(0,K)
 
     while len(SEQ)<top_list:        
@@ -63,19 +63,22 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
                 #trial-add feature from the best i-1 candidates
                 tried_list = []
                 for temp_trial in trial_subset:
-                    remain_indicator = np.array(range(0,K))
-                    remain_indicator[list(temp_trial)]=-1
-                    for j in range(remain_indicator):
+                    remain_indicator = range(0,K)
+                    for temp_idx in temp_trial[0]:
+                        ##print temp_idx
+                        remain_indicator[temp_idx]=-1
+                    for j in range(len(remain_indicator)):
                         if remain_indicator[j]!=-1:
                             #a valid trial passed
                             #set as a list to insert candidate
-                            valid_trial = list(temp_trial)
+                            valid_trial = list(temp_trial[0])
                             for jj in range(len(valid_trial)):
-                                if valid_trial[jj]<remain_indicator[j]:
+                                if valid_trial[jj]>remain_indicator[j]:
                                     valid_trial.insert(jj,remain_indicator[j])
                                     break
+                                #if jj==len(valid_trial)-1:
                                 elif jj==len(valid_trial)-1:
-                                    valid_trial.extend(remain_indicator[j])
+                                    valid_trial.insert(jj+1,remain_indicator[j])
                             #turn into a tuple for consistency
                             valid_trial = tuple(valid_trial)
                             if valid_trial not in tried_list:
@@ -107,9 +110,8 @@ def get_top_anomaly(DATA,GMM_pairwise,MI_pairwise,max_order,
         print str(len(temp_seq))+' samples added into the list\n'
         SEQ.extend([index_set[i] for i in temp_seq])
         #remove these samples
-        for i in temp_seq:
-            np.delete(DATA,i,axis=0)
-            del index_set[i]
+        np.delete(DATA,temp_seq,axis=0)
+        np.delete(index_set,temp_seq)
     return SEQ,BEST
 
 if __name__ == '__main__':
