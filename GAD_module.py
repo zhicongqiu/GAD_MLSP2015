@@ -330,7 +330,12 @@ def calculate_roc(anomaly_list,LABEL,normal_cat):
         else:
             roc_auc+=TD
             FA+=1
-    return roc_auc/(TD*FA)
+    if TD==0:
+        return 0
+    elif FA==0:
+        return 1
+    else:
+        return roc_auc/(TD*FA)
 
 def get_subset_DATA_GMM_MI(DATA,GMM_pairwise,MI_pairwise,f_subset):
     DATA_subset = DATA[:,list(f_subset)]
